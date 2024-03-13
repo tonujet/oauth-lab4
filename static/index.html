@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsonwebtoken/8.5.1/jsonwebtoken.min.js"></script>
+
+</head>
+
+<body>
+
+<main id="main-holder">
+    <a href="/logout" id="logout">Logout</a>
+
+    <h1 id="login-header">Login</h1>
+
+    <div id="login-error-msg-holder">
+        <p id="login-error-msg">Invalid username <span id="error-msg-second-line">and/or password</span></p>
+    </div>
+
+    <form id="login-form" action="/api/login" method="post">
+        <input type="text" name="login" id="username-field" class="login-form-field" placeholder="Username">
+        <input type="password" name="password" id="password-field" class="login-form-field" placeholder="Password">
+        <input type="submit" value="Login" id="login-form-submit">
+    </form>
+
+</main>
+</body>
+
+
+<script>
+    const LOGIN_ENDPOINT = '/api/auth/login'
+    const LOGOUT_ENDPOINT = '/api/auth/logout'
+    const USER_ENDPOINT = '/api/auth/user'
+    const REFRESH_TOKEN_ENDPOINT = "/api/auth/refresh"
+
+    const loginForm = document.getElementById('login-form');
+    const loginButton = document.getElementById('login-form-submit');
+    const loginErrorMsg = document.getElementById('login-error-msg');
+    const logoutLink = document.getElementById('logout');
+
+    const get_form_data = () => {
+        return {
+            login: loginForm.login.value,
+            password: loginForm.password.value
+        };
+    }
+
+    const set_user_page = () => {
+        const user = JSON.parse(localStorage.getItem('user'))
+        if (!user) return
+
+        const mainHolder = document.getElementById('main-holder');
+        const loginHeader = document.getElementById('login-header');
+
+        loginForm.remove();
+        loginErrorMsg.remove();
+        loginHeader.remove();
+
+        mainHolder.append(`Hello ${user.name}`);
+        logoutLink.style.opacity = 1;
+    }
+
+    const onLogoutClick = (e) => {
+        e.preventDefault();
+        sessionStorage.removeItem('session');
+        localStorage.removeItem('user')
+        location.reload();
+    }
+
+
+    const onLoginClick = async (e) => {
+        e.preventDefault();
+        try {
+            const login_res = await axios({
+                method: 'post',
+                url: LOGIN_ENDPOINT,
+                data: get_form_data()
+            })
+            const tokens = login_res.data
+            sessionStorage.setItem('session', JSON.stringify(tokens));
+            const user_res = await axios.get(USER_ENDPOINT, {
+                headers: {
+                    Authorization: `Bearer ${tokens.access_token}`
+                }
+            });
+            const user = user_res.data
+            localStorage.setItem('user', JSON.stringify(user))
+            set_user_page()
+        } catch (e) {
+            loginErrorMsg.style.opacity = 1;
+        }
+    }
+
+    logoutLink.addEventListener('click', onLogoutClick);
+    loginButton.addEventListener('click', onLoginClick);
+    const isTokenExpired = (token) => {
+        try {
+            const decodedToken = JSON.parse(atob(token.split('.')[1]));
+            const expirationTime = decodedToken.exp;
+            const expirationDate = new Date(expirationTime * 1000);
+            const formattedExpirationDate = expirationDate.toLocaleString();
+            console.log("Token expires at:", formattedExpirationDate);
+
+            if (expirationTime) {
+                const currentTime = Math.floor(Date.now() / 1000);
+                return expirationTime < currentTime;
+            } else {
+                return false;
+            }
+        } catch (error) {
+            return true;
+        }
+    }
+
+    const refresh_token = async () => {
+        try {
+            const tokens = JSON.parse(sessionStorage.getItem("session"))
+            if (!tokens || !tokens.access_token) return
+
+            const is_expired = isTokenExpired(tokens.access_token)
+
+            if (!is_expired) return
+
+            const new_tokens = await axios({
+                method: 'post',
+                url: REFRESH_TOKEN_ENDPOINT,
+                data: tokens
+            })
+            sessionStorage.setItem("session", JSON.stringify(new_tokens.data))
+        } catch (e){
+            console.log(e)
+            sessionStorage.removeItem("session")
+            localStorage.removeItem("user")
+        } finally {
+            set_user_page()
+        }
+    }
+    const on_start_page = () => {
+        refresh_token()
+    }
+
+
+    on_start_page()
+</script>
+
+<style>
+    html {
+        height: 100%;
+    }
+
+    body {
+        height: 100%;
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        display: grid;
+        justify-items: center;
+        align-items: center;
+        background-color: #3a3a3a;
+    }
+
+    #logout {
+        opacity: 0;
+    }
+
+    #main-holder {
+        width: 50%;
+        height: 70%;
+        display: grid;
+        justify-items: center;
+        align-items: center;
+        background-color: white;
+        border-radius: 7px;
+        box-shadow: 0px 0px 5px 2px black;
+    }
+
+    #login-error-msg-holder {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        justify-items: center;
+        align-items: center;
+    }
+
+    #login-error-msg {
+        width: 23%;
+        text-align: center;
+        margin: 0;
+        padding: 5px;
+        font-size: 12px;
+        font-weight: bold;
+        color: #8a0000;
+        border: 1px solid #8a0000;
+        background-color: #e58f8f;
+        opacity: 0;
+    }
+
+    #error-msg-second-line {
+        display: block;
+    }
+
+    #login-form {
+        align-self: flex-start;
+        display: grid;
+        justify-items: center;
+        align-items: center;
+    }
+
+    .login-form-field::placeholder {
+        color: #3a3a3a;
+    }
+
+    .login-form-field {
+        border: none;
+        border-bottom: 1px solid #3a3a3a;
+        margin-bottom: 10px;
+        border-radius: 3px;
+        outline: none;
+        padding: 0px 0px 5px 5px;
+    }
+
+    #login-form-submit {
+        width: 100%;
+        padding: 7px;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        font-weight: bold;
+        background-color: #3a3a3a;
+        cursor: pointer;
+        outline: none;
+    }
+</style>
+
+</html>
